@@ -26,11 +26,46 @@ async function run() {
         // Connect the client to the server	(optional starting in v4.7)
         // await client.connect();
 
-        const database = client.db("gadgetsDB");
-        const productsCollection = database.collection("products");
+        const database = client.db("fundCalculatorDB");
+        const fundsCollection = database.collection("funds");
+        const membersCollection = database.collection("members");
+
+        //<---middleware for verify admin--->
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.query.email;
+            const query = { "users.email": email };
+            const result = await membersCollection.findOne(query);
+            if (result?.role !== 'admin') {
+                return res.status(401).send({ message: "Unauthorized Access" });
+            }
+            next();
+        }
+
+        app.post('/login', async (req, res) => {
+            const { org_email, email } = req.body;
+            const query = { organization_email: org_email };
+            const isOrg = await membersCollection.findOne(query);
+            if (!isOrg) return res.send({ message: 'Organization not found!' })
+            const isUser = isOrg.users.find((user) => user?.email === email);
+            if (!isUser) {
+                const result = await membersCollection.updateOne(
+                    { organization_email: org_email },
+                    {
+                        $push: {
+                            users: {
+                                email,
+                                role: "user"
+                            }
+                        }
+                    }
+                )
+                console.log(result);
+            }
+            res.send(isUser)
+        })
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
+        // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
