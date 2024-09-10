@@ -120,6 +120,39 @@ async function run() {
             res.send(newTransactionObj);
         })
 
+        app.patch("/edit-transactions", verifyAdmin, async (req, res) => {
+            const trans = req.body;
+            const { date, org_email } = req.query;
+            const organization = await fundsCollection.findOne({
+                organization_email: org_email,
+                time: date
+            });
+
+            const result = await fundsCollection.findOneAndUpdate(
+                {
+                    organization_email: org_email,
+                    time: date,
+                    "transactions._id": new ObjectId(trans.id)
+                },
+                {
+                    $set: {
+                        "transactions.$.text": trans.text,
+                        "transactions.$.amount": trans.amount,
+                        "transactions.$.type": trans.type
+                    }
+                },
+                {
+                    returnDocument: "after",
+                }
+            );
+
+            const updatedTransactionObj = result.transactions.find(
+                (transaction) => transaction._id.toString() === trans?.id
+            );
+
+            res.send(updatedTransactionObj);
+        })
+
         // Send a ping to confirm a successful connection
         // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
