@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -32,10 +32,12 @@ async function run() {
 
         //<---middleware for verify admin--->
         const verifyAdmin = async (req, res, next) => {
-            const email = req.query.email;
-            const query = { "users.email": email };
+            const { email, org_email } = req.query;
+            const query = { organization_email: org_email };
             const result = await membersCollection.findOne(query);
-            if (result?.role !== 'admin') {
+            const isAdmin = result.users.find((u) => u.email === email);
+
+            if (isAdmin?.role !== 'admin') {
                 return res.status(401).send({ message: "Unauthorized Access" });
             }
             next();
@@ -48,20 +50,74 @@ async function run() {
             if (!isOrg) return res.send({ message: 'Organization not found!' })
             const isUser = isOrg.users.find((user) => user?.email === email);
             if (!isUser) {
-                const result = await membersCollection.updateOne(
+                const user = {
+                    email,
+                    role: "user"
+                }
+                await membersCollection.updateOne(
                     { organization_email: org_email },
                     {
                         $push: {
-                            users: {
-                                email,
-                                role: "user"
-                            }
+                            users: user
                         }
                     }
                 )
-                console.log(result);
+                res.send({ user, org_email })
+                return;
             }
-            res.send(isUser)
+            const user = isOrg.users.find((user) => user?.email === email);
+            res.send({ user, org_email })
+        })
+
+        app.get("/transactions", async (req, res) => {
+            const date = req.query.date;
+            const org_email = req.query.org_email;
+            const organization = await fundsCollection.findOne({
+                organization_email: org_email,
+                time: date
+            });
+            if (!organization) {
+                return res.send([]);
+            }
+            res.send(organization.transactions);
+        })
+
+        app.post("/add-transactions", verifyAdmin, async (req, res) => {
+            const trans = req.body;
+            const { date, org_email } = req.query;
+
+            const newTransactionObj = {
+                _id: new ObjectId(),
+                text: trans.text,
+                amount: trans.amount,
+                type: trans.type
+            };
+
+            const organization = await fundsCollection.findOne({
+                organization_email: org_email,
+                time: date
+            });
+
+            if (!organization) {
+                await fundsCollection.insertOne({
+                    organization_email: org_email,
+                    time: date,
+                    transactions: [newTransactionObj]
+                })
+            } else {
+                await fundsCollection.updateOne(
+                    {
+                        organization_email: org_email,
+                        time: date
+                    },
+                    {
+                        $push: {
+                            transactions: newTransactionObj
+                        }
+                    }
+                )
+            }
+            res.send(newTransactionObj);
         })
 
         // Send a ping to confirm a successful connection
