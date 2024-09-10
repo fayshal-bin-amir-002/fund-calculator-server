@@ -153,6 +153,22 @@ async function run() {
             res.send(updatedTransactionObj);
         })
 
+        app.delete("/delete-transactions/:id", verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const { date, org_email } = req.query;
+
+            const result = await fundsCollection.updateOne(
+                {
+                    organization_email: org_email,
+                    time: date
+                },
+                {
+                    $pull: { transactions: { _id: new ObjectId(id) } }
+                }
+            );
+            res.send(id);
+        })
+
         // Send a ping to confirm a successful connection
         // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
